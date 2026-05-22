@@ -1,4 +1,4 @@
-"""Typer entry point. Subcommands are wired up in tasks 16–17."""
+"""Typer entry point."""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ import sys
 import typer
 from rich.console import Console
 
+from funding_tool.cli.backtest_cmd import backtest_command
+from funding_tool.cli.history_cmd import history_command
 from funding_tool.core.errors import FundingToolError
 
 app = typer.Typer(
@@ -15,10 +17,8 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-
-@app.callback()
-def _entry() -> None:
-    """Top-level callback. Currently a no-op; reserved for global flags."""
+app.command(name="backtest")(backtest_command)
+app.command(name="history")(history_command)
 
 
 def main() -> None:
