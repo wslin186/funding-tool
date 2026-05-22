@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import decimal
 import sys
 from decimal import Decimal
 from pathlib import Path
@@ -61,7 +62,10 @@ def backtest_command(
     else:
         if size is None:
             raise typer.BadParameter(f"--size is required for {mode_u} mode")
-        size_dec = Decimal(size)
+        try:
+            size_dec = Decimal(size)
+        except (decimal.InvalidOperation, ValueError) as exc:
+            raise typer.BadParameter(f"--size must be a number, got {size!r}") from exc
 
     start_dt = parse_user_datetime(start)
     end_dt = parse_user_datetime(end)

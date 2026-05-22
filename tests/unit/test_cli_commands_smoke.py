@@ -178,3 +178,78 @@ def test_history_prompts_when_no_credentials_resolve(
     assert result.exit_code == 0, result.stdout
     assert "No credentials provided" in result.stdout
     assert "Total funding P&L" in result.stdout
+
+
+def test_history_named_account_with_missing_keyring_does_not_prompt(
+    _stub_exchange: FakeExchange,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """If --account is given but the keyring entry is gone, error — don't prompt silently."""
+    yaml_path = tmp_path / "accounts.yaml"
+    # Account in YAML, but no matching keyring entries → get_credentials raises
+    # MissingCredentialsError. The CLI must surface that, not prompt.
+    yaml_path.write_text(
+        "default: my-main\n"
+        "accounts:\n"
+        "  my-main:\n"
+        "    exchange: binance_usdm\n"
+        "    api_key_ref: 'keyring:funding-tool/my-main:key'\n"
+        "    secret_ref: 'keyring:funding-tool/my-main:secret'\n"
+        "    created_at: 2026-05-22T10:00:00+00:00\n"
+        "    permissions_verified_at: null\n"
+    )
+
+    from funding_tool.cli import history_cmd
+    monkeypatch.setattr(history_cmd, "_default_config_path", lambda: yaml_path)
+
+    # Use a fake keyring with no entries — but we also need history_command to
+    # construct its AccountStore using *this* keyring. Patch the AccountStore
+    # constructor at the call site (history_cmd) so it uses our fake.
+    from funding_tool.core.account_store import AccountStore as _RealStore
+
+    class _EmptyKeyring:
+        def get_password(self, s: str, u: str) -> str | None:
+            return None
+
+        def set_password(self, s: str, u: str, v: str) -> None: ...
+
+        def delete_password(self, s: str, u: str) -> None: ...
+
+    def _store_factory(*, config_path, keyring=None):  # type: ignore[no-untyped-def]
+        return _RealStore(config_path=config_path, keyring=_EmptyKeyring())
+
+    monkeypatch.setattr(history_cmd, "AccountStore", _store_factory, raising=False)
+
+    monkeypatch.delenv("BINANCE_API_KEY", raising=False)
+    monkeypatch.delenv("BINANCE_API_SECRET", raising=False)
+
+    result = runner.invoke(
+        app,
+        ["history", "--start", "2026-01-01", "--end", "2026-02-01"],
+    )
+    assert result.exit_code != 0
+    # CliRunner invokes app() directly (not main()), so the FundingToolError
+    # surfaces as result.exception. Verify it's the right error from
+    # AccountStore.get_credentials, NOT a silent prompt fallthrough.
+    from funding_tool.core.errors import MissingCredentialsError
+
+    assert isinstance(result.exception, MissingCredentialsError)
+    assert "missing" in str(result.exception).lower()
+
+
+def test_backtest_invalid_size_gives_clean_error():
+    """Bad --size should produce a typer error, not a Python traceback."""
+    import decimal
+
+    result = runner.invoke(app, [
+        "backtest",
+        "--symbol", "BTCUSDT", "--side", "LONG",
+        "--start", "2026-01-01", "--end", "2026-01-02",
+        "--size-mode", "BASE", "--size", "not-a-number",
+    ])
+    # typer.BadParameter -> SystemExit(2). Importantly, the underlying
+    # decimal.InvalidOperation must NOT escape as the captured exception
+    # (that would mean main() would show a raw traceback).
+    assert result.exit_code == 2
+    assert not isinstance(result.exception, decimal.InvalidOperation)

@@ -18,7 +18,7 @@ from funding_tool.cli.output import (
 )
 from funding_tool.core.account import run_account_history
 from funding_tool.core.account_store import AccountStore, resolve_credentials
-from funding_tool.core.errors import MissingCredentialsError, ValidationError
+from funding_tool.core.errors import ValidationError
 from funding_tool.core.exchanges.base import ExchangeProtocol
 from funding_tool.core.models import ApiCredentials
 from funding_tool.infra.time_util import parse_user_datetime
@@ -70,15 +70,21 @@ def history_command(
     import keyring as _keyring  # noqa: PLC0415
 
     store = AccountStore(config_path=_default_config_path(), keyring=_keyring)
-    try:
+    # Detect "no credential source configured at all" → interactive prompt.
+    # Anything else (e.g. stored account's keyring entries wiped) must propagate
+    # so the user sees a clear error rather than a misleading prompt.
+    env = dict(os.environ)
+    no_cli = not (api_key or api_secret)
+    no_env_both = not (env.get("BINANCE_API_KEY") and env.get("BINANCE_API_SECRET"))
+    no_account = account is None
+    no_default = store.get_default_name() is None
+    if no_cli and no_env_both and no_account and no_default:
+        creds = _prompt_for_credentials()
+    else:
         creds = resolve_credentials(
             store, cli_api_key=api_key, cli_api_secret=api_secret,
-            env=dict(os.environ), account_name=account,
+            env=env, account_name=account,
         )
-    except MissingCredentialsError:
-        # Priority 5: interactive prompt. resolve_credentials raises only when
-        # nothing else worked, so this is the last fallback.
-        creds = _prompt_for_credentials()
 
     start_dt = parse_user_datetime(start)
     end_dt = parse_user_datetime(end)
