@@ -109,6 +109,53 @@ async def test_missing_ranges_interior_hole(cache):
 
 
 @pytest.mark.asyncio
+async def test_missing_ranges_tolerates_ms_jitter(cache):
+    """Binance fundingTime values drift by a few ms between events. Two adjacent
+    cached events whose delta is ~interval_hours (off by milliseconds) are
+    contiguous — there is no gap between them."""
+    # Events are 8 hours apart but with different sub-second offsets, mimicking
+    # Binance's real behaviour: one event lands at :00.007Z, the next at :00.013Z.
+    prev = FundingEvent(
+        timestamp=datetime(2026, 1, 1, 12, 0, 0, 7_000, tzinfo=UTC),
+        symbol="BTCUSDT",
+        rate=Decimal("0.0001"),
+        mark_price=Decimal("50000"),
+        interval_hours=8,
+    )
+    nxt = FundingEvent(
+        timestamp=datetime(2026, 1, 1, 20, 0, 0, 13_000, tzinfo=UTC),
+        symbol="BTCUSDT",
+        rate=Decimal("0.0001"),
+        mark_price=Decimal("50000"),
+        interval_hours=8,
+    )
+    await cache.put("binance_usdm", "BTCUSDT", [prev, nxt])
+    gaps = await cache.missing_ranges(
+        "binance_usdm", "BTCUSDT",
+        datetime(2026, 1, 1, 12, tzinfo=UTC),
+        datetime(2026, 1, 1, 20, tzinfo=UTC),
+    )
+    assert gaps == []
+
+
+@pytest.mark.asyncio
+async def test_missing_ranges_full_interval_gap_still_detected(cache):
+    """The jitter tolerance must not swallow real missing events: a delta of one
+    full interval (or more) between adjacent cached events is still a gap."""
+    # Cached events at hours 0 and 16 — the event at hour 8 is genuinely missing.
+    await cache.put("binance_usdm", "BTCUSDT", [_ev(0), _ev(16)])
+    gaps = await cache.missing_ranges(
+        "binance_usdm", "BTCUSDT",
+        datetime(2026, 1, 1, tzinfo=UTC),
+        datetime(2026, 1, 1, 16, tzinfo=UTC),
+    )
+    # Interior gap from hour 0 + 8h = hour 8 → hour 16.
+    assert gaps == [
+        (datetime(2026, 1, 1, 8, tzinfo=UTC), datetime(2026, 1, 1, 16, tzinfo=UTC)),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_decimal_precision_preserved(cache):
     ev = FundingEvent(
         timestamp=datetime(2026, 1, 1, tzinfo=UTC),

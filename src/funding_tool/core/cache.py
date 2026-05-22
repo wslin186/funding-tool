@@ -86,11 +86,22 @@ class SqliteFundingRateCache:
     ) -> list[tuple[datetime, datetime]]:
         """Compute sub-ranges of [start, end] not covered by cache.
 
-        Treats consecutive cached events as contiguous when their timestamp delta
-        is exactly `interval_hours`. Any larger gap is reported. Returns:
-          - leading gap (start, first_cached.ts) if start < first_cached.ts
-          - interior gap (prev.ts + interval, next.ts) wherever delta > interval
-          - trailing gap (last_cached.ts + interval, end) if end > last + interval
+        Binance funding timestamps drift by milliseconds across consecutive
+        events (e.g. one at ``:00:00.007Z``, the next at ``:00:00.013Z``).
+        A gap is only reported when the delta is large enough to contain at
+        least one missing funding event — concretely, when the delta is
+        within roughly one full ``interval_hours`` we treat the boundary as
+        contiguous and emit no gap. The tolerance threshold used is
+        ``1.5 * interval_hours``: well above any realistic ms-level jitter,
+        comfortably below a true missing event (≥ 2 intervals apart).
+
+        Returns:
+          - leading gap (start, first_cached.ts) when start precedes the
+            first cached event by at least roughly one interval
+          - interior gap (prev.ts + interval, next.ts) when the delta
+            between adjacent cached events exceeds ~1 interval
+          - trailing gap (last_cached.ts + interval, end) when end follows
+            the last cached event by more than ~1 interval
 
         Empty cache in window → single gap (start, end).
         """
@@ -100,20 +111,27 @@ class SqliteFundingRateCache:
 
         gaps: list[tuple[datetime, datetime]] = []
 
-        # Leading gap
-        if cached[0].timestamp > start:
-            gaps.append((start, cached[0].timestamp))
+        # Leading gap — only report when `start` precedes the first cached
+        # event by more than ~1 interval (i.e. there's room for a missing
+        # funding event between them). Sub-interval drift is jitter, not a gap.
+        first = cached[0]
+        leading_tolerance = (timedelta(hours=first.interval_hours) * 3) // 2
+        if first.timestamp - start > leading_tolerance:
+            gaps.append((start, first.timestamp))
 
-        # Interior gaps — adjacent cached events whose delta exceeds one interval
+        # Interior gaps — adjacent cached events whose delta is too large to
+        # be explained by ms-level jitter on a single interval boundary.
         for prev, nxt in zip(cached, cached[1:], strict=False):
-            expected_next = prev.timestamp + timedelta(hours=prev.interval_hours)
-            if nxt.timestamp > expected_next:
-                gaps.append((expected_next, nxt.timestamp))
+            interval = timedelta(hours=prev.interval_hours)
+            if nxt.timestamp - prev.timestamp >= (interval * 3) // 2:
+                gaps.append((prev.timestamp + interval, nxt.timestamp))
 
-        # Trailing gap
+        # Trailing gap — symmetric to leading: only report when `end` follows
+        # the last cached event by more than ~1 interval.
         last = cached[-1]
         next_after_last = last.timestamp + timedelta(hours=last.interval_hours)
-        if end > next_after_last:
+        trailing_tolerance = (timedelta(hours=last.interval_hours) * 3) // 2
+        if end - last.timestamp > trailing_tolerance:
             gaps.append((next_after_last, end))
 
         return gaps
