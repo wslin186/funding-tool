@@ -7,7 +7,9 @@ import sys
 import typer
 from rich.console import Console
 
+from funding_tool.cli.account_cmd import account_app
 from funding_tool.cli.backtest_cmd import backtest_command
+from funding_tool.cli.cache_cmd import cache_app
 from funding_tool.cli.history_cmd import history_command
 from funding_tool.core.errors import FundingToolError
 
@@ -19,6 +21,8 @@ app = typer.Typer(
 
 app.command(name="backtest")(backtest_command)
 app.command(name="history")(history_command)
+app.add_typer(account_app, name="account")
+app.add_typer(cache_app, name="cache")
 
 
 def main() -> None:
