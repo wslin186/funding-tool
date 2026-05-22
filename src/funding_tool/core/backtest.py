@@ -35,6 +35,7 @@ def _validate(inp: BacktestInput) -> None:
         raise ValidationError(f"start ({inp.start}) must be before end ({inp.end})")
     if inp.size_mode in ("BASE", "QUOTE") and (inp.size is None or inp.size <= 0):
         raise ValidationError(f"size must be positive for {inp.size_mode} mode")
+    # RATE_ONLY: size is irrelevant (may be None).
 
 
 def _quantity_for_event(
@@ -43,10 +44,10 @@ def _quantity_for_event(
     if inp.size_mode == "BASE":
         return inp.size  # type: ignore[return-value]
     if inp.size_mode == "QUOTE":
-        # Constant after entry: size / events[0].mark_price
         entry = events[0].mark_price
         return inp.size / entry  # type: ignore[operator]
-    # RATE_ONLY handled in Task 12; assert unreachable here.
+    if inp.size_mode == "RATE_ONLY":
+        return Decimal("1")
     raise ValidationError(f"unsupported size_mode {inp.size_mode}")
 
 
@@ -71,31 +72,52 @@ async def run_backtest(
         ))
 
     event_count = len(payments)
+    side_sign_dec = Decimal(side_sign)
+
     cumulative_rate_pct = (
-        sum((Decimal(side_sign) * p.event.rate for p in payments), Decimal("0")) * 100
+        sum((side_sign_dec * p.event.rate for p in payments), Decimal("0")) * 100
     )
     avg_rate = (
-        Decimal(mean([Decimal(side_sign) * p.event.rate for p in payments]))
+        Decimal(mean([side_sign_dec * p.event.rate for p in payments]))
         if event_count
         else Decimal("0")
     )
 
-    total_quote = sum((p.payment_quote for p in payments), Decimal("0"))
-    total_base = sum(
-        (p.payment_quote / p.event.mark_price for p in payments), Decimal("0")
-    )
+    total_quote: Decimal | None
+    total_base: Decimal | None
+    if inp.size_mode == "RATE_ONLY":
+        total_quote = None
+        total_base = None
+    else:
+        total_quote = sum((p.payment_quote for p in payments), Decimal("0"))
+        total_base = sum(
+            (p.payment_quote / p.event.mark_price for p in payments), Decimal("0")
+        )
 
-    # APR for BASE / QUOTE: total_quote / avg_notional / elapsed_years
     elapsed_seconds = Decimal(str((inp.end - inp.start).total_seconds()))
     elapsed_years = elapsed_seconds / _SECONDS_PER_YEAR
-    if event_count and elapsed_years > 0:
+
+    if not event_count:
+        apr = Decimal("0")
+    elif inp.size_mode == "RATE_ONLY":
+        # APR = avg_rate × intervals_per_year, weighted by event interval_hours.
+        weighted_iph = Decimal(
+            mean([Decimal(p.event.interval_hours) for p in payments])
+        )
+        intervals_per_year = (Decimal("24") * Decimal("365.25")) / weighted_iph
+        apr = avg_rate * intervals_per_year
+    else:
+        # BASE/QUOTE branch: total_quote was assigned a Decimal above.
+        assert total_quote is not None
         if inp.size_mode == "BASE":
             avg_notional = Decimal(mean([p.notional_quote for p in payments]))
         else:  # QUOTE
             avg_notional = inp.size  # type: ignore[assignment]
-        apr = (total_quote / avg_notional) / elapsed_years if avg_notional else Decimal("0")
-    else:
-        apr = Decimal("0")
+        apr = (
+            (total_quote / avg_notional) / elapsed_years
+            if avg_notional and elapsed_years > 0
+            else Decimal("0")
+        )
 
     return BacktestResult(
         input=inp,
