@@ -188,3 +188,33 @@ def test_resolve_credentials_priority(tmp_path: Path, monkeypatch: pytest.Monkey
     c = resolve_credentials(store, cli_api_key=None, cli_api_secret=None,
                             env={}, account_name=None)
     assert c.api_key == "DK"
+
+
+def test_resolve_credentials_half_cli_pair_raises(tmp_path: Path) -> None:
+    from funding_tool.core.account_store import resolve_credentials
+
+    store = AccountStore(config_path=tmp_path / "accounts.yaml", keyring=FakeKeyring())
+    with pytest.raises(ConfigError, match="--api-key and --api-secret"):
+        resolve_credentials(
+            store, cli_api_key="K", cli_api_secret=None, env={}, account_name=None,
+        )
+    with pytest.raises(ConfigError, match="--api-key and --api-secret"):
+        resolve_credentials(
+            store, cli_api_key=None, cli_api_secret="S", env={}, account_name=None,
+        )
+
+
+def test_resolve_credentials_half_env_pair_raises(tmp_path: Path) -> None:
+    from funding_tool.core.account_store import resolve_credentials
+
+    store = AccountStore(config_path=tmp_path / "accounts.yaml", keyring=FakeKeyring())
+    with pytest.raises(ConfigError, match="BINANCE_API_KEY"):
+        resolve_credentials(
+            store, cli_api_key=None, cli_api_secret=None,
+            env={"BINANCE_API_KEY": "K"}, account_name=None,
+        )
+    with pytest.raises(ConfigError, match="BINANCE_API_KEY"):
+        resolve_credentials(
+            store, cli_api_key=None, cli_api_secret=None,
+            env={"BINANCE_API_SECRET": "S"}, account_name=None,
+        )

@@ -90,14 +90,35 @@ class AccountStore:
 
     def _save(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        # Write to temp then rename for atomicity, set 0600 before publish.
+        # Create tmp file with 0600 from the start so plaintext creds (fallback
+        # mode) are never world-readable, even briefly. O_EXCL guards against a
+        # stale tmp; this is a single-user CLI, so unlinking on collision is safe.
         tmp = self._path.with_suffix(self._path.suffix + ".tmp")
-        with tmp.open("w", encoding="utf-8") as f:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        try:
+            fd = os.open(tmp, flags, 0o600)
+        except FileExistsError:
+            tmp.unlink()
+            fd = os.open(tmp, flags, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             yaml.safe_dump(self._data, f, sort_keys=False)
-        os.chmod(tmp, 0o600)
         os.replace(tmp, self._path)
 
     def _keyring_available(self) -> bool:
+        """Probe the keyring backend.
+
+        Returns False only when no backend is installed at all. We deliberately
+        keep a broad `except Exception` here rather than narrowing to specific
+        keyring error classes: narrowing requires importing `keyring.errors`,
+        which (a) couples this module to the real `keyring` package layout
+        (the protocol allows any backend, including our test fake), and
+        (b) the substring matching needed to distinguish "not installed" from
+        "locked" via RuntimeError is fragile.
+        Trade-off: a transient backend error (e.g. KeyringLocked) routes to the
+        plaintext-fallback path. The CLI requires explicit `allow_plaintext=True`
+        before writing plaintext, so this cannot silently downgrade security
+        without user consent at the prompt layer.
+        """
         try:
             self._keyring.get_password(_SERVICE_PREFIX, "__probe__")
         except Exception:
@@ -220,11 +241,19 @@ def resolve_credentials(
 
     Interactive prompting (priority 5) is handled in the CLI layer, not here.
     """
+    # Both must be set together; reject XOR so a missing flag doesn't
+    # silently fall through to a different credential source.
+    if bool(cli_api_key) ^ bool(cli_api_secret):
+        raise ConfigError("--api-key and --api-secret must be provided together")
     if cli_api_key and cli_api_secret:
         return ApiCredentials(api_key=cli_api_key, api_secret=cli_api_secret)
 
     env_key = env.get("BINANCE_API_KEY")
     env_secret = env.get("BINANCE_API_SECRET")
+    if bool(env_key) ^ bool(env_secret):
+        raise ConfigError(
+            "BINANCE_API_KEY and BINANCE_API_SECRET must both be set"
+        )
     if env_key and env_secret:
         return ApiCredentials(api_key=env_key, api_secret=env_secret)
 
