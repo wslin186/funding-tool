@@ -1,4 +1,4 @@
-"""Datetime parsing and conversion. All internal datetimes are tz-aware UTC."""
+"""Datetime parsing and conversion. All returned datetimes are tz-aware (UTC or explicit offset)."""
 
 from datetime import UTC, datetime
 
