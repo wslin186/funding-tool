@@ -1,0 +1,5 @@
+[
+  {"symbol": "BTCUSDT", "incomeType": "FUNDING_FEE", "income": "-1.23", "asset": "USDT", "time": 1735689600000, "info": "FUNDING_FEE", "tranId": "1001", "tradeId": ""},
+  {"symbol": "BTCUSDT", "incomeType": "FUNDING_FEE", "income": "0.45", "asset": "USDT", "time": 1735718400000, "info": "FUNDING_FEE", "tranId": "1002", "tradeId": ""},
+  {"symbol": "ETHUSDT", "incomeType": "FUNDING_FEE", "income": "0.10", "asset": "USDT", "time": 1735747200000, "info": "FUNDING_FEE", "tranId": "1003", "tradeId": ""}
+]
