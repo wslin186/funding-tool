@@ -41,7 +41,7 @@ async def test_rate_only_totals_are_none():
 @pytest.mark.asyncio
 async def test_rate_only_cumulative_rate_long():
     """LONG: side_sign = -1; cumulative_rate_pct = sum(-rate) × 100."""
-    ex = FakeExchange(funding_rates=_events(["0.0001", "0.0001", "-0.0002"]))
+    ex = FakeExchange(funding_rates=_events(["0.0001", "0.0001", "0.0001"]))
     inp = BacktestInput(
         symbol="BTCUSDT", side="LONG",
         start=datetime(2026, 1, 1, tzinfo=UTC),
@@ -49,8 +49,8 @@ async def test_rate_only_cumulative_rate_long():
         size_mode="RATE_ONLY", size=None,
     )
     res = await run_backtest(inp, exchange=ex)
-    # sum(-1 × [0.0001, 0.0001, -0.0002]) × 100 = 0
-    assert res.cumulative_rate_pct == Decimal("0")
+    # sum(-1 × [0.0001, 0.0001, 0.0001]) × 100 = -0.0300
+    assert res.cumulative_rate_pct == Decimal("-0.0300")
 
 
 @pytest.mark.asyncio
@@ -66,6 +66,22 @@ async def test_rate_only_apr_uses_intervals_per_year():
     res = await run_backtest(inp, exchange=ex)
     # avg_rate (with SHORT sign) = +0.0001; intervals_per_year = 24*365.25/8 = 1095.75
     expected = Decimal("0.0001") * (Decimal("24") * Decimal("365.25") / Decimal("8"))
+    assert res.apr == expected
+
+
+@pytest.mark.asyncio
+async def test_rate_only_apr_long_is_negative_for_positive_rate():
+    """LONG + positive funding rate → negative APR (you pay funding)."""
+    ex = FakeExchange(funding_rates=_events(["0.0001"], interval_hours=8))
+    inp = BacktestInput(
+        symbol="BTCUSDT", side="LONG",
+        start=datetime(2026, 1, 1, tzinfo=UTC),
+        end=datetime(2026, 1, 2, tzinfo=UTC),
+        size_mode="RATE_ONLY", size=None,
+    )
+    res = await run_backtest(inp, exchange=ex)
+    # avg_rate = -1 × 0.0001 = -0.0001; intervals_per_year = 24*365.25/8 = 1095.75
+    expected = Decimal("-0.0001") * (Decimal("24") * Decimal("365.25") / Decimal("8"))
     assert res.apr == expected
 
 
