@@ -57,6 +57,10 @@ class FakeExchange:
     async def validate_symbol(self, symbol: str) -> bool:
         return symbol in self.valid_symbols
 
+    async def list_symbols(self) -> list[str]:
+        """Return all tradeable USDT-M perpetual symbols."""
+        return sorted(self.valid_symbols)
+
     async def verify_credentials(
         self, credentials: ApiCredentials
     ) -> PermissionReport:

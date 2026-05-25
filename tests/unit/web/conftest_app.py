@@ -2,6 +2,7 @@
 import asyncio
 import base64
 import os
+import threading
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -11,6 +12,7 @@ import bcrypt
 import pytest
 from fastapi import FastAPI
 
+from funding_tool.core.exchanges.base import ExchangeProtocol
 from funding_tool.core.models import (
     BacktestResult, FundingEvent, FundingPayment, HistoryResult,
     IncomeRecord, PermissionReport,
@@ -24,6 +26,46 @@ from funding_tool.web.secret_store import SecretStore
 
 _PASSWORD = "s3cret"
 _USER = "admin"
+
+# ---------------------------------------------------------------------------
+# Call-count tracking for list_symbols (used by test_symbols_cached)
+# ---------------------------------------------------------------------------
+_list_symbols_call_count = 0
+
+
+def get_list_symbols_call_count() -> int:
+    return _list_symbols_call_count
+
+
+def reset_list_symbols_call_count() -> None:
+    global _list_symbols_call_count
+    _list_symbols_call_count = 0
+
+
+# ---------------------------------------------------------------------------
+# Safe asyncio bridge: runs a coroutine in a fresh thread so it is safe to
+# call from both sync code AND from inside an already-running event loop
+# (e.g. pytest-asyncio's auto-mode).
+# ---------------------------------------------------------------------------
+
+def _run_sync(coro):  # type: ignore[no-untyped-def]
+    """Run an async coroutine from sync code, safe even when an event loop
+    is already running on the calling thread."""
+    result_holder: dict[str, object] = {}
+    exc_holder: dict[str, BaseException] = {}
+
+    def _runner() -> None:
+        try:
+            result_holder["value"] = asyncio.run(coro)
+        except BaseException as exc:
+            exc_holder["exc"] = exc
+
+    t = threading.Thread(target=_runner)
+    t.start()
+    t.join()
+    if "exc" in exc_holder:
+        raise exc_holder["exc"]
+    return result_holder.get("value")
 
 
 def build_app_for_test(*, tmp_path: Path | None = None) -> FastAPI:
@@ -47,7 +89,9 @@ def build_app_for_test(*, tmp_path: Path | None = None) -> FastAPI:
         await store.init_schema()
         return store
 
-    store = asyncio.run(_init_store())
+    # Use _run_sync instead of asyncio.run() so this is safe even when called
+    # from inside an already-running event loop (e.g. pytest-asyncio auto mode).
+    store = _run_sync(_init_store())
     app.state.settings = settings
     app.state.secret_store = store
     app.state.audit = AuditLogger(settings.audit_log_path)
@@ -90,32 +134,36 @@ def _noop_lifespan(app):  # type: ignore[no-untyped-def]
 
 def _make_fake_exchange_factory():
     def _factory(creds=None):
-        ex = MagicMock()
-        async def fetch_symbols():
+        # spec=ExchangeProtocol ensures only real protocol methods are accessible;
+        # attribute typos (e.g. ex.fetch_symbls) raise AttributeError immediately.
+        ex = MagicMock(spec=ExchangeProtocol)
+
+        async def list_symbols() -> list[str]:
+            global _list_symbols_call_count
+            _list_symbols_call_count += 1
             return ["BTCUSDT", "ETHUSDT", "BTCBUSD"]
+
         async def fetch_funding_rates(symbol, start, end):
             return [FundingEvent(
                 timestamp=datetime(2025, 1, 1, 8, tzinfo=timezone.utc),
                 symbol=symbol, rate=Decimal("0.0001"),
                 mark_price=Decimal("60000"), interval_hours=8,
             )]
-        async def verify_credentials():
+
+        async def verify_credentials(credentials):
             return PermissionReport(read_ok=True, trading_enabled=False,
                                     withdrawals_enabled=False, spot_trading_enabled=None)
-        async def fetch_funding_history(start, end, symbol=None):
-            return HistoryResult(
-                start=start, end=end, total=Decimal("10"),
-                by_symbol={"BTCUSDT": Decimal("10")},
-                by_month={"2025-01": Decimal("10")},
-                records=[IncomeRecord(
-                    timestamp=datetime(2025, 1, 15, tzinfo=timezone.utc),
-                    symbol="BTCUSDT", amount_usdt=Decimal("10"), tran_id="t1",
-                )],
-            )
-        ex.fetch_symbols = fetch_symbols
+
+        async def fetch_funding_income(credentials, start, end, symbol=None):
+            return [IncomeRecord(
+                timestamp=datetime(2025, 1, 15, tzinfo=timezone.utc),
+                symbol="BTCUSDT", amount_usdt=Decimal("10"), tran_id="t1",
+            )]
+
+        ex.list_symbols = list_symbols
         ex.fetch_funding_rates = fetch_funding_rates
         ex.verify_credentials = verify_credentials
-        ex.fetch_funding_history = fetch_funding_history
+        ex.fetch_funding_income = fetch_funding_income
         return ex
     return _factory
 

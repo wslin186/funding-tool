@@ -267,6 +267,20 @@ class BinanceUsdmExchange:
             return False
         return True
 
+    async def list_symbols(self) -> list[str]:
+        """Return all tradeable USDT-M perpetual symbols (sorted)."""
+        async with HttpClient(self._base_url) as http:
+            data = await http.get_json("/fapi/v1/exchangeInfo")
+        symbols = data.get("symbols", []) if isinstance(data, dict) else []
+        return sorted(
+            s["symbol"]
+            for s in symbols
+            if isinstance(s, dict)
+            and s.get("status") == "TRADING"
+            and s.get("contractType") == "PERPETUAL"
+            and s.get("quoteAsset") == "USDT"
+        )
+
     async def verify_credentials(
         self, credentials: ApiCredentials
     ) -> PermissionReport:

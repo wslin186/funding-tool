@@ -32,7 +32,7 @@ async def symbols(
     else:
         factory = get_exchange_factory(request)
         ex = factory()
-        all_symbols = await ex.fetch_symbols()
+        all_symbols = await ex.list_symbols()
         _cache["all"] = (now, all_symbols)
     q_upper = q.upper()
     return {"symbols": [s for s in all_symbols if q_upper in s][:50]}

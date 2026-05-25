@@ -30,6 +30,10 @@ class ExchangeProtocol(Protocol):
 
     async def validate_symbol(self, symbol: str) -> bool: ...
 
+    async def list_symbols(self) -> list[str]:
+        """Return all tradeable USDT-M perpetual symbols."""
+        ...
+
     async def verify_credentials(
         self, credentials: ApiCredentials
     ) -> PermissionReport: ...
