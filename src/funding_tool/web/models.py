@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, PlainSerializer
 
-from funding_tool.core.models import BacktestResult, HistoryResult
+from funding_tool.core.models import BacktestResult, HistoryResult, PermissionReport
 
 DecimalStr = Annotated[Decimal, PlainSerializer(lambda d: format(d, "f"), return_type=str)]
 DecimalStrOpt = Annotated[Decimal | None, PlainSerializer(
@@ -142,7 +142,7 @@ class AccountCreateResponse(BaseModel):
     account: AccountOut
 
 
-def map_permission_report(report) -> AccountPermissions:
+def map_permission_report(report: PermissionReport) -> AccountPermissions:
     """core PermissionReport → 对外 3 字段（丢弃 spot_trading_enabled）。"""
     return AccountPermissions(
         read=report.read_ok,

@@ -38,7 +38,7 @@ def _load_master_key_from_credentials() -> tuple[bytes, bytes | None]:
     return active, prev
 
 
-def _exchange_factory_default(creds=None):  # type: ignore[no-untyped-def]
+def _exchange_factory_default(creds: object = None) -> object:
     from funding_tool.core.exchanges.binance_usdm import BinanceUsdmExchange
     return BinanceUsdmExchange(credentials=creds)
 
@@ -63,8 +63,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.auth = auth
     app.state.csrf = csrf
     app.state.exchange_factory = _exchange_factory_default
-    settings.tasks_dir.mkdir(parents=True, exist_ok=True)
     try:
+        settings.tasks_dir.mkdir(parents=True, exist_ok=True)
         yield
     finally:
         audit.close()
