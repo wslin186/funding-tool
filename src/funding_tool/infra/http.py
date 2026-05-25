@@ -15,6 +15,9 @@ from funding_tool.core.errors import (
     NetworkError,
     RateLimitError,
 )
+from funding_tool.infra.log import get_logger
+
+logger = get_logger(__name__)
 
 # Binance error codes we map to specific exception types.
 # See https://binance-docs.github.io/apidocs/futures/en/#error-codes for the full list.
@@ -84,9 +87,17 @@ class HttpClient:
     ) -> Any:
         last_exc: Exception | None = None
         for attempt in range(self._retry_attempts):
+            # Log via the scrubbing logger — `params` may contain `api_key`,
+            # `signature`, and other secrets which ScrubbingFilter masks before
+            # the record reaches any handler.
+            logger.debug("-> GET %s params=%s", path, params)
             try:
                 resp = await self._client.get(path, params=params, headers=headers)
-            except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout) as exc:
+            except httpx.TransportError as exc:
+                # TransportError is the parent of ConnectError, ConnectTimeout,
+                # ReadTimeout, WriteTimeout, PoolTimeout, and bare DNS/transport
+                # failures. Catching the parent ensures none of them slip past
+                # the wrapper and surface as a raw traceback at the CLI boundary.
                 last_exc = exc
                 await self._sleep(attempt)
                 continue
@@ -118,6 +129,7 @@ class HttpClient:
             if resp.status_code >= 400:
                 raise ExchangeError(f"{resp.status_code}: {resp.text}")
 
+            logger.debug("<- %s %s (%d bytes)", resp.status_code, path, len(resp.content))
             return resp.json()
 
         if isinstance(last_exc, RateLimitError):

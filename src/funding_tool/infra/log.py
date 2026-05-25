@@ -14,16 +14,36 @@ from __future__ import annotations
 import logging
 import re
 
+# Each pattern accepts the credential key in any of these forms:
+#   key=VALUE                          (URL / query-string)
+#   key: VALUE                         (HTTP header)
+#   'key': 'VALUE'  /  "key": "VALUE"  (Python dict repr / JSON)
+# The leading group (`\1` in the substitution) captures everything up to and
+# including the opening of the value (including any leading quote) so the
+# replacement preserves the surrounding syntax.
+#
+# Value termination:
+#   - For full-suppression patterns (api_secret, signature) we stop at the
+#     first whitespace, quote, comma, ampersand, or closing brace — anything
+#     that could plausibly end a value in a header, query string, or dict
+#     repr.
+#   - For the api_key pattern we keep the first 6 alphanumeric chars as a
+#     debug hint, then drop the rest up to the same terminators.
+_KEY_BOUNDARY = r"['\"]?(?:X-MBX-APIKEY|api[_-]?key)['\"]?\s*[=:]\s*['\"]?"
+_SECRET_BOUNDARY = r"['\"]?api[_-]?secret['\"]?\s*[=:]\s*['\"]?"
+_SIGNATURE_BOUNDARY = r"['\"]?signature['\"]?\s*[=:]\s*['\"]?"
+_VALUE_TAIL = r"[^\s,&'\"}]*"
+
 _API_KEY_PATTERN = re.compile(
-    r"(X-MBX-APIKEY[=:\s]+|api_key[=:\s]+)([A-Za-z0-9]{6})([A-Za-z0-9]+)",
+    rf"({_KEY_BOUNDARY})([A-Za-z0-9]{{6}}){_VALUE_TAIL}",
     re.IGNORECASE,
 )
 _API_SECRET_PATTERN = re.compile(
-    r"(api_secret[=:\s]+)[^\s,&\"']+",
+    rf"({_SECRET_BOUNDARY}){_VALUE_TAIL}",
     re.IGNORECASE,
 )
 _SIGNATURE_PATTERN = re.compile(
-    r"(signature[=:])[A-Fa-f0-9]+",
+    rf"({_SIGNATURE_BOUNDARY}){_VALUE_TAIL}",
     re.IGNORECASE,
 )
 

@@ -1,3 +1,5 @@
+import logging
+
 import httpx
 import pytest
 import respx
@@ -55,6 +57,55 @@ async def test_network_error_wrapped():
     async with HttpClient(base_url="https://fapi.example.com", retry_attempts=1, retry_base_sleep=0) as client:
         with respx.mock(base_url="https://fapi.example.com") as mock:
             mock.get("/fapi/v1/ping").mock(side_effect=httpx.ConnectError("boom"))
+            with pytest.raises(NetworkError):
+                await client.get_json("/fapi/v1/ping")
+
+
+@pytest.mark.asyncio
+async def test_request_debug_log_is_scrubbed(caplog: pytest.LogCaptureFixture) -> None:
+    """Sensitive params (api_key, signature) must not appear verbatim in DEBUG logs.
+
+    The http client logs each outgoing request via the scrubbing logger;
+    this is the one place credentials enter the wire and the whole point of
+    routing through ScrubbingFilter.
+    """
+    caplog.set_level(logging.DEBUG, logger="funding_tool.infra.http")
+    async with HttpClient(base_url="https://fapi.example.com") as client:
+        with respx.mock(base_url="https://fapi.example.com") as mock:
+            mock.get("/fapi/v1/income").mock(return_value=httpx.Response(200, json=[]))
+            await client.get_json(
+                "/fapi/v1/income",
+                params={
+                    "symbol": "BTCUSDT",
+                    "api_key": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+                    "signature": "deadbeefcafe1234567890abcdef",
+                },
+            )
+
+    log_text = "\n".join(r.getMessage() for r in caplog.records)
+    assert "GHIJKLMNOPQRSTUVWXYZ" not in log_text  # full key value gone
+    assert "deadbeefcafe1234567890abcdef" not in log_text  # signature gone
+    assert "BTCUSDT" in log_text  # non-sensitive value preserved
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exc",
+    [
+        httpx.ConnectTimeout("connect timed out"),
+        httpx.PoolTimeout("pool exhausted"),
+        httpx.TransportError("dns failure"),
+    ],
+)
+async def test_transport_error_subclasses_wrapped_to_network_error(exc: httpx.TransportError) -> None:
+    """ConnectTimeout/PoolTimeout/generic TransportError must reach the CLI as NetworkError.
+
+    These are NOT subclasses of ConnectError, so they used to bypass the narrow
+    handler and surface as raw tracebacks (CLI only catches FundingToolError).
+    """
+    async with HttpClient(base_url="https://fapi.example.com", retry_attempts=1, retry_base_sleep=0) as client:
+        with respx.mock(base_url="https://fapi.example.com") as mock:
+            mock.get("/fapi/v1/ping").mock(side_effect=exc)
             with pytest.raises(NetworkError):
                 await client.get_json("/fapi/v1/ping")
 

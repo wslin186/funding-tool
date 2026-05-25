@@ -59,3 +59,51 @@ def test_get_logger_installs_filter_once():
     assert log1 is log2
     assert len(log2.filters) == n_filters_first
     assert any(isinstance(f, ScrubbingFilter) for f in log2.filters)
+
+
+# Dict-repr / JSON-form coverage. The http client logs `params` dicts via %s,
+# which renders as Python dict repr ({'api_key': 'ABC...'}). The original
+# patterns required `=` / `:` directly adjacent to the value, so they missed
+# dict-repr entirely. These tests pin the broadened behaviour.
+
+
+def test_api_key_dict_repr_single_quoted_scrubbed():
+    raw = "GET /url params={'api_key': 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'symbol': 'BTCUSDT'}"
+    out = _capture(raw)
+    assert "GHIJKL" not in out
+    assert "MNOPQR" not in out
+    assert "ABCDEF" in out  # 6-char prefix retained
+    assert "BTCUSDT" in out  # non-sensitive value untouched
+
+
+def test_api_key_dict_repr_double_quoted_scrubbed():
+    raw = 'response body {"api_key": "ABCDEFGHIJKLMNOPQRSTUVWXYZ"}'
+    out = _capture(raw)
+    assert "GHIJKL" not in out
+    assert "ABCDEF" in out
+
+
+def test_api_secret_dict_repr_scrubbed():
+    secret = "TopSecretApiSecret123456"
+    raw = f"params={{'api_secret': '{secret}', 'recvWindow': 5000}}"
+    out = _capture(raw)
+    assert secret not in out
+    assert "api_secret" in out
+    assert "5000" in out
+
+
+def test_signature_dict_repr_scrubbed():
+    raw = "params={'signature': 'deadbeefcafe1234', 'timestamp': 1}"
+    out = _capture(raw)
+    assert "deadbeefcafe1234" not in out
+    assert "signature" in out
+
+
+def test_signed_binance_url_querystring_scrubbed():
+    raw = (
+        "GET /fapi/v1/income?symbol=BTCUSDT&timestamp=123&"
+        "signature=deadbeefcafe1234567890abcdef"
+    )
+    out = _capture(raw)
+    assert "deadbeefcafe1234567890abcdef" not in out
+    assert "BTCUSDT" in out  # everything before signature untouched
