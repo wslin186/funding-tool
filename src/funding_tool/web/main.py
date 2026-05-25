@@ -73,15 +73,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     app = FastAPI(title="funding-tool web", lifespan=lifespan, openapi_url=None, docs_url=None, redoc_url=None)
 
-    try:
-        from funding_tool.web.routes import meta, csrf as csrf_route, accounts, backtest, history
-        app.include_router(meta.router, prefix="/api")
-        app.include_router(csrf_route.router, prefix="/api")
-        app.include_router(accounts.router, prefix="/api")
-        app.include_router(backtest.router, prefix="/api")
-        app.include_router(history.router, prefix="/api")
-    except ImportError:
-        pass
+    import importlib
+    for _mod_name in ("meta", "csrf", "accounts", "backtest", "history"):
+        try:
+            _mod = importlib.import_module(f"funding_tool.web.routes.{_mod_name}")
+        except ImportError:
+            continue
+        app.include_router(_mod.router, prefix="/api")
+    del _mod_name
 
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
