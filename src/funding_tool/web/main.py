@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from funding_tool.web.audit import AuditLogger
@@ -81,6 +81,33 @@ def create_app() -> FastAPI:
             continue
         app.include_router(_mod.router, prefix="/api")
     del _mod_name
+
+    @app.exception_handler(HTTPException)
+    async def _http_exc(request: Request, exc: HTTPException) -> JSONResponse:
+        # Reshape dict-detail HTTPExceptions raised by dependencies/routes
+        # into the canonical {"error": {...}} envelope. Preserves string-detail
+        # behavior under "message" so default-FastAPI paths still degrade
+        # gracefully.
+        detail = exc.detail
+        if isinstance(detail, dict) and "code" in detail:
+            payload = {
+                "code": detail.get("code"),
+                "message": detail.get("message", ""),
+                "field": detail.get("field"),
+                "error_id": detail.get("error_id"),
+            }
+        else:
+            payload = {
+                "code": "server_error",
+                "message": str(detail) if detail else "",
+                "field": None,
+                "error_id": None,
+            }
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": payload},
+            headers=exc.headers or None,
+        )
 
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
