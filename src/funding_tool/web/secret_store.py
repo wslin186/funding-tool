@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 import secrets
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,12 +51,17 @@ class SecretStore:
             self._keys[active_version - 1] = AESGCM(prev_key)
         self._active_version = active_version
 
-    async def init_schema(self) -> None:
+    @asynccontextmanager
+    async def _connect(self) -> AsyncIterator[aiosqlite.Connection]:
         async with aiosqlite.connect(self._db_path) as db:
-            await db.execute("PRAGMA journal_mode=WAL")
-            await db.execute("PRAGMA synchronous=NORMAL")
             await db.execute("PRAGMA busy_timeout=5000")
+            await db.execute("PRAGMA synchronous=NORMAL")
             await db.execute("PRAGMA foreign_keys=ON")
+            yield db
+
+    async def init_schema(self) -> None:
+        async with self._connect() as db:
+            await db.execute("PRAGMA journal_mode=WAL")
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS accounts (
                     name TEXT PRIMARY KEY,
@@ -89,7 +96,7 @@ class SecretStore:
             await db.commit()
 
     async def verify_canary(self) -> None:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self._connect() as db:
             cur = await db.execute("SELECT key_version, nonce, ciphertext FROM canary WHERE id=1")
             row = await cur.fetchone()
             if row is None:
@@ -111,7 +118,7 @@ class SecretStore:
         }).encode()
         nonce, ct = self._encrypt(payload)
         now = datetime.now(timezone.utc).isoformat()
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self._connect() as db:
             try:
                 await db.execute(
                     """INSERT INTO accounts
@@ -124,7 +131,7 @@ class SecretStore:
                 raise ValueError(f"account {name!r} already exists") from e
 
     async def list_accounts(self) -> list[AccountRecord]:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self._connect() as db:
             cur = await db.execute(
                 "SELECT name, label, created_at, key_first6, "
                 "       perm_read, perm_trade, perm_withdraw "
@@ -145,7 +152,7 @@ class SecretStore:
     async def update_permissions(
         self, name: str, *, read: bool | None, trade: bool | None, withdraw: bool | None
     ) -> None:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self._connect() as db:
             await db.execute(
                 "UPDATE accounts SET perm_read=?, perm_trade=?, perm_withdraw=?, "
                 "perm_checked_at=? WHERE name=?",
@@ -160,7 +167,7 @@ class SecretStore:
             await db.commit()
 
     async def get_credentials(self, name: str) -> ApiCredentials:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self._connect() as db:
             cur = await db.execute(
                 "SELECT key_version, nonce, ciphertext FROM accounts WHERE name=?", (name,)
             )
@@ -175,9 +182,11 @@ class SecretStore:
         )
 
     async def delete_account(self, name: str) -> None:
-        async with aiosqlite.connect(self._db_path) as db:
-            await db.execute("DELETE FROM accounts WHERE name=?", (name,))
+        async with self._connect() as db:
+            cur = await db.execute("DELETE FROM accounts WHERE name=?", (name,))
             await db.commit()
+            if cur.rowcount == 0:
+                raise KeyError(name)
 
     def _encrypt(self, plaintext: bytes) -> tuple[bytes, bytes]:
         nonce = secrets.token_bytes(12)

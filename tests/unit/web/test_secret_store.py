@@ -3,6 +3,8 @@ import pytest
 from datetime import datetime, timezone
 from pathlib import Path
 
+from cryptography.exceptions import InvalidTag
+
 from funding_tool.core.models import ApiCredentials
 from funding_tool.web.secret_store import SecretStore
 
@@ -52,12 +54,17 @@ async def test_wrong_master_key_fails_to_decrypt(tmp_path: Path) -> None:
     await s1.init_schema()
     await s1.add_account("a", "", ApiCredentials("K", "S"))
     s2 = SecretStore(tmp_path / "db.sqlite", master_key=k2)
-    with pytest.raises(Exception):
+    with pytest.raises(InvalidTag):
         await s2.verify_canary()
 
 
 async def test_canary_passes_with_correct_key(store: SecretStore) -> None:
     await store.verify_canary()
+
+
+async def test_delete_missing_account_raises(store: SecretStore) -> None:
+    with pytest.raises(KeyError):
+        await store.delete_account("nonexistent")
 
 
 async def test_duplicate_name_rejected(store: SecretStore) -> None:
