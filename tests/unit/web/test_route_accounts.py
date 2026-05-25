@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -81,3 +83,39 @@ def test_duplicate_account_rejected(client: TestClient, csrf) -> None:
     client.post("/api/accounts", json=body, headers=csrf)
     r = client.post("/api/accounts", json=body, headers=csrf)
     assert r.status_code == 409
+    body = r.json()
+    assert body["error"]["code"] == "validation_error"
+    assert body["error"]["field"] == "account_name"
+
+
+def test_create_account_timeout(tmp_path, basic_auth_headers) -> None:
+    from unittest.mock import MagicMock
+    from funding_tool.core.exchanges.base import ExchangeProtocol
+
+    app = build_app_for_test(tmp_path=tmp_path)
+
+    def factory(creds=None):
+        ex = MagicMock(spec=ExchangeProtocol)
+        async def verify_credentials(credentials):
+            raise asyncio.TimeoutError()
+        ex.verify_credentials = verify_credentials
+        return ex
+
+    app.state.exchange_factory = factory
+    client = TestClient(app)
+    r = client.get("/api/csrf", headers=basic_auth_headers)
+    token = r.json()["token"]
+    headers = {
+        "Authorization": basic_auth_headers["Authorization"],
+        "X-Funding-Token": token,
+        "Origin": ORIGIN,
+        "Referer": REFERER,
+        "Cookie": f"funding_csrf={token}",
+    }
+    r2 = client.post(
+        "/api/accounts",
+        json={"name": "x", "label": "", "api_key": "ABCDEF12", "api_secret": "secret-xx"},
+        headers=headers,
+    )
+    assert r2.status_code == 502
+    assert r2.json()["error"]["code"] == "network_error"
