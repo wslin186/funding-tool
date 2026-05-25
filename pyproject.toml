@@ -25,9 +25,19 @@ dev = [
     "mypy>=1.10",
     "types-PyYAML",
 ]
+web = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.27",
+  "aiosqlite>=0.20",
+  "cryptography>=42",
+  "bcrypt>=4.1",
+  "slowapi>=0.1.9",
+  "python-multipart>=0.0.9",
+]
 
 [project.scripts]
 funding-tool = "funding_tool.cli.__main__:app"
+funding-tool-web = "funding_tool.web.main:run"
 
 [tool.setuptools.packages.find]
 where = ["src"]
