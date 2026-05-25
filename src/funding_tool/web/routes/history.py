@@ -118,6 +118,6 @@ async def history_result(
     return HistoryTaskStatus(
         status=st["status"],
         progress=st.get("progress"),
-        result=HistoryPayload(**st["result"]) if st.get("result") else None,
+        result=HistoryPayload.model_validate(st["result"]) if st.get("result") else None,
         error=st.get("error"),
     )

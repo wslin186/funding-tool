@@ -77,6 +77,7 @@ class TaskManager:
             }
         finally:
             self._persist(task_id)
+            self._tasks.pop(task_id, None)
 
     def _persist(self, task_id: str) -> None:
         p = self._base / f"{task_id}.json"
