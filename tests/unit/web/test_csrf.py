@@ -66,3 +66,18 @@ def test_token_is_constant_time_safe(guard: CsrfGuard) -> None:
         guard.verify(cookie_token=t, header_token=t[:-1] + "X",
                      origin="https://example.com",
                      referer="https://example.com/funding/")
+
+
+def test_public_origin_with_path_raises() -> None:
+    with pytest.raises(ValueError):
+        CsrfGuard(public_origin="https://example.com/sub")
+
+
+def test_referer_path_traversal_rejected(guard: CsrfGuard) -> None:
+    t = guard.issue_token()
+    with pytest.raises(CsrfError):
+        guard.verify(
+            cookie_token=t, header_token=t,
+            origin="https://example.com",
+            referer="https://example.com/funding/../admin",
+        )
