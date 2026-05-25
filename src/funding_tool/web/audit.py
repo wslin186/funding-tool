@@ -14,6 +14,7 @@ _FORBIDDEN_KEYS = {"api_key", "api_secret", "master_key", "master_fingerprint", 
 class AuditLogger:
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
+        # Logger name keyed on path.name; assumes one global AuditLogger per filename.
         self._logger = logging.getLogger(f"funding_tool.audit.{path.name}")
         self._logger.setLevel(logging.INFO)
         self._logger.propagate = False
@@ -39,6 +40,11 @@ class AuditLogger:
             bad = _FORBIDDEN_KEYS.intersection(extras)
             if bad:
                 raise ValueError(f"forbidden audit keys: {bad}")
+            for k, v in extras.items():
+                if v is not None and not isinstance(v, (str, int, bool)):
+                    raise ValueError(
+                        f"audit extras value for {k!r} must be scalar (str/int/bool/None), got {type(v).__name__}"
+                    )
         record = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "ip": ip,
@@ -51,12 +57,7 @@ class AuditLogger:
         }
         if extras:
             record.update(extras)
-        try:
-            self._logger.info(json.dumps(record, ensure_ascii=False, separators=(",", ":")))
-        except Exception:
-            import syslog
-            syslog.openlog("funding-tool-audit")
-            syslog.syslog(syslog.LOG_WARNING, json.dumps(record))
+        self._logger.info(json.dumps(record, ensure_ascii=False, separators=(",", ":")))
 
     def close(self) -> None:
         for h in list(self._logger.handlers):

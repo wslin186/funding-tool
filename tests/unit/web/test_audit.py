@@ -38,3 +38,11 @@ def test_no_secret_fields_accepted(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         a.log(action="x", ip="1.1.1.1", user=None, result="ok",
               extras={"api_key": "leaked"})  # type: ignore[call-arg]
+
+
+def test_nested_forbidden_key_in_extras_rejected(tmp_path: Path) -> None:
+    import pytest
+    a = AuditLogger(tmp_path / "audit.jsonl")
+    with pytest.raises(ValueError):
+        a.log(action="x", ip="1.1.1.1", user=None, result="ok",
+              extras={"meta": {"api_key": "leaked"}})
