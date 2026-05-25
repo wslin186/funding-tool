@@ -73,3 +73,19 @@ def test_extract_client_ip_falls_back_when_no_header() -> None:
     req.client.host = "127.0.0.1"
     req.headers = {}
     assert extract_client_ip(req) == "127.0.0.1"
+
+
+def test_init_rejects_non_bcrypt_hash() -> None:
+    with pytest.raises(ValueError):
+        AuthVerifier(username="admin", password_hash=b"not-a-bcrypt-hash")
+
+
+def test_state_evicts_oldest_when_capped() -> None:
+    v = AuthVerifier(username="admin", password_hash=_hash("s"), lockout_max=10, lockout_secs=300, state_max=2)
+    for ip in ("1.1.1.1", "2.2.2.2", "3.3.3.3"):
+        with pytest.raises(AuthError):
+            v.verify(ip=ip, header=_basic("admin", "WRONG"))
+    # 1.1.1.1 should be evicted; the other two still tracked
+    assert "1.1.1.1" not in v._state
+    assert "2.2.2.2" in v._state
+    assert "3.3.3.3" in v._state

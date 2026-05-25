@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import secrets
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from threading import Lock
 from typing import Literal
@@ -33,17 +34,24 @@ class AuthVerifier:
         password_hash: bytes,
         lockout_max: int = 5,
         lockout_secs: int = 300,
+        state_max: int = 4096,
     ) -> None:
+        if not isinstance(password_hash, (bytes, bytearray)) or not password_hash.startswith(
+            (b"$2a$", b"$2b$", b"$2x$", b"$2y$")
+        ):
+            raise ValueError("password_hash must be a bcrypt hash (bytes starting with $2[abxy]$)")
         self._username = username
         self._password_hash = password_hash
         self._lockout_max = lockout_max
         self._lockout_secs = lockout_secs
-        self._state: dict[str, _IpState] = {}
+        self._state_max = state_max
+        self._state: OrderedDict[str, _IpState] = OrderedDict()
         self._lock = Lock()
 
     def verify(self, *, ip: str, header: str | None) -> str:
         with self._lock:
             st = self._state.setdefault(ip, _IpState())
+            self._state.move_to_end(ip)
             now = time.monotonic()
             if st.locked_until > now:
                 raise AuthError("web_auth_locked")
@@ -67,6 +75,9 @@ class AuthVerifier:
 
         with self._lock:
             self._state[ip] = _IpState()
+            self._state.move_to_end(ip)
+            if len(self._state) > self._state_max:
+                self._state.popitem(last=False)
         return self._username
 
     def reset(self, ip: str) -> None:
@@ -76,9 +87,12 @@ class AuthVerifier:
     def _record_failure(self, ip: str) -> None:
         with self._lock:
             st = self._state.setdefault(ip, _IpState())
+            self._state.move_to_end(ip)
             st.failures += 1
             if st.failures >= self._lockout_max:
                 st.locked_until = time.monotonic() + self._lockout_secs
+            if len(self._state) > self._state_max:
+                self._state.popitem(last=False)
 
 
 _LOOPBACK = {"127.0.0.1", "::1"}
