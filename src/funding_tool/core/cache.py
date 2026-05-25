@@ -111,6 +111,9 @@ class SqliteFundingRateCache:
 
         gaps: list[tuple[datetime, datetime]] = []
 
+        # All three branches use the same strict-greater-than tolerance check
+        # against ``1.5 * interval_hours`` so the boundary at delta == 1.5*interval
+        # is treated identically as "no gap" (matches the docstring's "exceeds").
         # Leading gap — only report when `start` precedes the first cached
         # event by more than ~1 interval (i.e. there's room for a missing
         # funding event between them). Sub-interval drift is jitter, not a gap.
@@ -123,7 +126,8 @@ class SqliteFundingRateCache:
         # be explained by ms-level jitter on a single interval boundary.
         for prev, nxt in zip(cached, cached[1:], strict=False):
             interval = timedelta(hours=prev.interval_hours)
-            if nxt.timestamp - prev.timestamp >= (interval * 3) // 2:
+            interior_tolerance = (interval * 3) // 2
+            if nxt.timestamp - prev.timestamp > interior_tolerance:
                 gaps.append((prev.timestamp + interval, nxt.timestamp))
 
         # Trailing gap — symmetric to leading: only report when `end` follows

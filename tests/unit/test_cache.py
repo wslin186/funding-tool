@@ -139,6 +139,37 @@ async def test_missing_ranges_tolerates_ms_jitter(cache):
 
 
 @pytest.mark.asyncio
+async def test_missing_ranges_at_exactly_1_5x_interval_no_gap(cache):
+    """Boundary pin: when adjacent cached events are exactly 1.5 * interval apart,
+    no interior gap is reported. The tolerance threshold is inclusive — matches
+    the docstring's "exceeds" wording and keeps all three branches (leading,
+    interior, trailing) consistent at the same delta."""
+    # interval_hours=8 → tolerance = 12h. Place events exactly 12h apart.
+    prev = FundingEvent(
+        timestamp=datetime(2026, 1, 1, 0, tzinfo=UTC),
+        symbol="BTCUSDT",
+        rate=Decimal("0.0001"),
+        mark_price=Decimal("50000"),
+        interval_hours=8,
+    )
+    nxt = FundingEvent(
+        timestamp=datetime(2026, 1, 1, 12, tzinfo=UTC),
+        symbol="BTCUSDT",
+        rate=Decimal("0.0001"),
+        mark_price=Decimal("50000"),
+        interval_hours=8,
+    )
+    await cache.put("binance_usdm", "BTCUSDT", [prev, nxt])
+    gaps = await cache.missing_ranges(
+        "binance_usdm", "BTCUSDT",
+        datetime(2026, 1, 1, 0, tzinfo=UTC),
+        datetime(2026, 1, 1, 12, tzinfo=UTC),
+    )
+    # delta == 1.5 * interval → strictly NOT exceeded → no interior gap.
+    assert gaps == []
+
+
+@pytest.mark.asyncio
 async def test_missing_ranges_full_interval_gap_still_detected(cache):
     """The jitter tolerance must not swallow real missing events: a delta of one
     full interval (or more) between adjacent cached events is still a gap."""

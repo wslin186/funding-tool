@@ -6,6 +6,7 @@ Opt-in via `pytest -m integration`.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
@@ -23,6 +24,10 @@ def _yesterday_dates() -> tuple[str, str]:
 
 def test_backtest_btcusdt_base_mode_runs():
     start, end = _yesterday_dates()
+    # env=os.environ.copy() is required so the subprocess sees the
+    # XDG_DATA_HOME override applied by the session-scoped fixture in
+    # conftest.py — subprocess.run() does not inherit monkeypatched env
+    # by default on all platforms.
     r = subprocess.run(
         [sys.executable, "-m", "funding_tool.cli",
          "backtest", "--symbol", "BTCUSDT", "--side", "LONG",
@@ -30,6 +35,7 @@ def test_backtest_btcusdt_base_mode_runs():
          "--size-mode", "BASE", "--size", "1",
          "--json"],
         capture_output=True, text=True, timeout=60,
+        env=os.environ.copy(),
     )
     assert r.returncode == 0, r.stderr
     data = json.loads(r.stdout)
@@ -45,6 +51,7 @@ def test_backtest_rate_only_mode():
          "--start", start, "--end", end,
          "--size-mode", "RATE_ONLY", "--json"],
         capture_output=True, text=True, timeout=60,
+        env=os.environ.copy(),
     )
     assert r.returncode == 0, r.stderr
     data = json.loads(r.stdout)
