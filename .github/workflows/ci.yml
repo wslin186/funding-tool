@@ -7,7 +7,7 @@ on:
     branches: [master]
 
 jobs:
-  test:
+  backend:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,7 +22,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[dev,web]"
 
       - name: Lint (ruff)
         run: ruff check .
@@ -34,3 +34,36 @@ jobs:
       # because they hit live Binance public endpoints and would be flaky in CI.
       - name: Tests (unit only)
         run: pytest
+
+      # Belt-and-suspenders: pin the zero-float guards so a regression in the
+      # core OR web layer fails CI even if a future pytest config change drops
+      # them from the default selection.
+      - name: Zero-float guard (core + web)
+        run: pytest tests/unit/test_no_float_in_core.py tests/unit/test_no_float_in_web.py -v
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
