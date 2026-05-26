@@ -57,6 +57,33 @@ export function PaymentTable({ payments }: Props) {
     return sortDir === "asc" ? " ▲" : " ▼";
   }
 
+  function sortableTh(k: SortKey, label: string) {
+    const active = sortKey === k;
+    const ariaSort: "ascending" | "descending" | "none" = active
+      ? sortDir === "asc"
+        ? "ascending"
+        : "descending"
+      : "none";
+    return (
+      <th
+        style={thStyle}
+        role="button"
+        tabIndex={0}
+        aria-sort={ariaSort}
+        onClick={() => toggleSort(k)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleSort(k);
+          }
+        }}
+      >
+        {label}
+        {arrow(k)}
+      </th>
+    );
+  }
+
   function exportCsv() {
     const header = ["时间", "费率", "标记价", "持仓", "名义", "收益"];
     const rows = sorted.map((p) => [
@@ -70,7 +97,8 @@ export function PaymentTable({ payments }: Props) {
     const csv = [header, ...rows]
       .map((r) => r.map((c) => csvEscape(String(c))).join(","))
       .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    // Prepend UTF-8 BOM so Excel on Windows decodes Chinese correctly.
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -110,18 +138,12 @@ export function PaymentTable({ payments }: Props) {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <th style={thStyle} onClick={() => toggleSort("timestamp")}>
-                时间{arrow("timestamp")}
-              </th>
-              <th style={thStyle} onClick={() => toggleSort("rate")}>
-                费率{arrow("rate")}
-              </th>
+              {sortableTh("timestamp", "时间")}
+              {sortableTh("rate", "费率")}
               <th style={{ ...thStyle, cursor: "default" }}>标记价</th>
               <th style={{ ...thStyle, cursor: "default" }}>持仓</th>
               <th style={{ ...thStyle, cursor: "default" }}>名义</th>
-              <th style={thStyle} onClick={() => toggleSort("payment_quote")}>
-                收益{arrow("payment_quote")}
-              </th>
+              {sortableTh("payment_quote", "收益")}
             </tr>
           </thead>
           <tbody>

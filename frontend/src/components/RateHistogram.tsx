@@ -9,6 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import type { FundingPayment } from "../types";
+import { COLOR_ACCENT, COLOR_BORDER } from "../themeColors";
 
 interface Props {
   payments: FundingPayment[];
@@ -43,11 +44,11 @@ export function RateHistogram({ payments }: Props) {
     <div style={{ height: 240 }}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 16, right: 24, bottom: 8, left: 8 }}>
-          <CartesianGrid strokeDasharray="3 3" />
+          <CartesianGrid stroke={COLOR_BORDER} strokeDasharray="3 3" />
           <XAxis dataKey="bin" />
           <YAxis allowDecimals={false} />
           <Tooltip />
-          <Bar dataKey="count" fill="var(--color-accent)" />
+          <Bar dataKey="count" fill={COLOR_ACCENT} />
         </BarChart>
       </ResponsiveContainer>
     </div>

@@ -12,11 +12,19 @@ export function SymbolPicker({ value, onChange }: Props) {
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reqIdRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     if (value.length < 2) {
-      setOptions([]);
+      if (mountedRef.current) setOptions([]);
       return;
     }
     debounceTimer.current = setTimeout(async () => {
@@ -24,6 +32,7 @@ export function SymbolPicker({ value, onChange }: Props) {
       const r = await api.get<{ symbols: string[] }>(
         `/symbols?q=${encodeURIComponent(value)}`,
       );
+      if (!mountedRef.current) return;
       if (id !== reqIdRef.current) return;
       if (r.data) setOptions(r.data.symbols.slice(0, 10));
     }, 200);

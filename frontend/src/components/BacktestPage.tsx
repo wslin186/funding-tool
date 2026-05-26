@@ -35,7 +35,7 @@ function defaultStart(): string {
 function localInputToIso(s: string): string {
   if (!s) return "";
   const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return s;
+  if (Number.isNaN(d.getTime())) return "";
   return d.toISOString();
 }
 
@@ -80,6 +80,14 @@ export function BacktestPage() {
     if (!symbol || busy) return;
     setBusy(true);
     setError(null);
+    if (!start || !end) {
+      setError({
+        code: "validation_error",
+        message: "请填写有效的开始/结束时间",
+      });
+      setBusy(false);
+      return;
+    }
     const req: BacktestRequest = {
       symbol,
       side,

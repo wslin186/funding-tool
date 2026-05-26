@@ -11,7 +11,8 @@ import {
   YAxis,
 } from "recharts";
 import type { FundingPayment } from "../types";
-import { formatTimestamp } from "../formatters";
+import { formatDecimalUsdt, formatTimestamp } from "../formatters";
+import { COLOR_ACCENT, COLOR_BORDER, COLOR_OK } from "../themeColors";
 
 interface Props {
   payments: FundingPayment[];
@@ -48,28 +49,35 @@ export function PayoutTimelineChart({ payments }: Props) {
     <div style={{ height: 320 }}>
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={{ top: 16, right: 24, bottom: 8, left: 8 }}>
-          <CartesianGrid strokeDasharray="3 3" />
+          <CartesianGrid stroke={COLOR_BORDER} strokeDasharray="3 3" />
           <XAxis dataKey="t" />
           <YAxis yAxisId="left" />
           <YAxis yAxisId="right" orientation="right" />
           <Tooltip
             formatter={(value, name) => {
-              const label = LEGEND[String(name)] ?? String(name);
-              return [value, label];
+              const key = String(name);
+              const label = LEGEND[key] ?? key;
+              const n = Number(value);
+              if (!Number.isFinite(n)) return [String(value), label];
+              if (key === "rate_pct") return [`${n.toFixed(4)}%`, label];
+              if (key === "payment" || key === "cum") {
+                return [formatDecimalUsdt(String(n)), label];
+              }
+              return [String(value), label];
             }}
           />
           <Legend formatter={(v) => LEGEND[String(v)] ?? String(v)} />
           <Bar
             yAxisId="right"
             dataKey="rate_pct"
-            fill="var(--color-accent)"
+            fill={COLOR_ACCENT}
             name="rate_pct"
           />
           <Line
             yAxisId="left"
             type="monotone"
             dataKey="cum"
-            stroke="var(--color-ok)"
+            stroke={COLOR_OK}
             dot={false}
             name="cum"
           />
