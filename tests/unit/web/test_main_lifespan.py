@@ -1,8 +1,15 @@
 import os
-import pytest
 from pathlib import Path
 
-from funding_tool.web.main import _load_master_key_from_credentials
+import pytest
+
+from funding_tool.core.cache import SqliteFundingRateCache
+from funding_tool.core.exchanges.binance_usdm import BinanceUsdmExchange
+from funding_tool.core.models import ApiCredentials
+from funding_tool.web.main import (
+    _load_master_key_from_credentials,
+    _make_exchange_factory,
+)
 
 
 def test_load_master_key_reads_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -36,3 +43,24 @@ def test_load_master_key_wrong_length_panics(tmp_path: Path, monkeypatch: pytest
     monkeypatch.setenv("CREDENTIALS_DIRECTORY", str(cred_dir))
     with pytest.raises(RuntimeError, match="32 bytes"):
         _load_master_key_from_credentials()
+
+
+# Regression: the production factory previously built
+# `BinanceUsdmExchange(credentials=...)`, which doesn't match the constructor
+# (it takes a SqliteFundingRateCache). The first route to call factory(...)
+# would have TypeError'd in production. The factory's `creds` arg is kept for
+# call-site compatibility (accounts/history pass creds; backtest/meta don't);
+# credentials reach the exchange via per-method calls, not the constructor.
+def test_factory_returns_exchange_with_no_args(tmp_path: Path) -> None:
+    cache = SqliteFundingRateCache(tmp_path / "cache.sqlite")
+    factory = _make_exchange_factory(cache)
+    ex = factory()
+    assert isinstance(ex, BinanceUsdmExchange)
+
+
+def test_factory_accepts_positional_and_kwarg_creds(tmp_path: Path) -> None:
+    cache = SqliteFundingRateCache(tmp_path / "cache.sqlite")
+    factory = _make_exchange_factory(cache)
+    creds = ApiCredentials(api_key="k" * 16, api_secret="s" * 16)
+    assert isinstance(factory(creds), BinanceUsdmExchange)
+    assert isinstance(factory(creds=creds), BinanceUsdmExchange)

@@ -6,11 +6,12 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncIterator
+from typing import AsyncIterator, Callable
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from funding_tool.core.cache import SqliteFundingRateCache
 from funding_tool.web.audit import AuditLogger
 from funding_tool.web.auth import AuthVerifier
 from funding_tool.web.config import Settings, load_settings
@@ -38,9 +39,15 @@ def _load_master_key_from_credentials() -> tuple[bytes, bytes | None]:
     return active, prev
 
 
-def _exchange_factory_default(creds: object = None) -> object:
-    from funding_tool.core.exchanges.binance_usdm import BinanceUsdmExchange
-    return BinanceUsdmExchange(credentials=creds)
+def _make_exchange_factory(cache: SqliteFundingRateCache) -> Callable[..., object]:
+    # The exchange API takes credentials as method arguments (verify_credentials,
+    # fetch_account_history, …), not constructor arguments. The factory's `creds`
+    # parameter is accepted but unused — it exists so call sites can write
+    # factory(), factory(creds), or factory(creds=creds) interchangeably.
+    def _factory(creds: object = None) -> object:
+        from funding_tool.core.exchanges.binance_usdm import BinanceUsdmExchange
+        return BinanceUsdmExchange(cache=cache)
+    return _factory
 
 
 @asynccontextmanager
@@ -57,12 +64,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     auth = AuthVerifier(username=settings.auth_user, password_hash=settings.auth_password_hash)
     csrf = CsrfGuard(public_origin=settings.public_origin)
 
+    # Funding-rate cache sits next to the secrets DB. Under deployment both
+    # live in /var/lib/funding-tool, which is in the systemd unit's
+    # ReadWritePaths and owned by the `funding` user.
+    cache = SqliteFundingRateCache(settings.db_path.parent / "funding_cache.sqlite")
+
     app.state.settings = settings
     app.state.secret_store = store
     app.state.audit = audit
     app.state.auth = auth
     app.state.csrf = csrf
-    app.state.exchange_factory = _exchange_factory_default
+    app.state.exchange_factory = _make_exchange_factory(cache)
     try:
         settings.tasks_dir.mkdir(parents=True, exist_ok=True)
         yield
