@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { AccountSummary, ApiError } from "../types";
 import { formatTimestamp } from "../formatters";
@@ -25,28 +25,42 @@ export function AccountsPage() {
   const [accs, setAccs] = useState<AccountSummary[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [deleting, setDeleting] = useState<Set<string>>(new Set());
+  const loadIdRef = useRef(0);
 
-  async function load() {
+  const load = useCallback(async () => {
+    const id = ++loadIdRef.current;
     const r = await api.get<{ accounts: AccountSummary[] }>("/accounts");
+    if (id !== loadIdRef.current) return; // a newer load() superseded us
     if (r.error) {
       setError(r.error);
       return;
     }
     setAccs(r.data?.accounts ?? []);
-  }
+  }, []);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   async function handleDelete(name: string) {
+    if (deleting.has(name)) return;
     if (!window.confirm(`确定删除账户「${name}」？此操作不可撤销。`)) return;
-    const r = await api.delete<void>(`/accounts/${encodeURIComponent(name)}`);
-    if (r.error) {
-      setError(r.error);
-      return;
+    setDeleting((prev) => new Set(prev).add(name));
+    try {
+      const r = await api.delete<void>(`/accounts/${encodeURIComponent(name)}`);
+      if (r.error) {
+        setError(r.error);
+        return;
+      }
+      await load();
+    } finally {
+      setDeleting((prev) => {
+        const next = new Set(prev);
+        next.delete(name);
+        return next;
+      });
     }
-    await load();
   }
 
   return (
@@ -130,7 +144,12 @@ export function AccountsPage() {
                   </div>
                 )}
                 <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
-                  <button type="button" onClick={() => void handleDelete(a.name)}>
+                  <button
+                    type="button"
+                    onClick={() => void handleDelete(a.name)}
+                    disabled={deleting.has(a.name)}
+                    aria-label={`删除账户 ${a.name}`}
+                  >
                     删除
                   </button>
                 </div>

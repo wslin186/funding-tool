@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { AccountSummary, ApiError } from "../types";
 import { ErrorBanner } from "./ErrorBanner";
@@ -15,6 +15,14 @@ export function AccountForm({ onSuccess, onCancel }: Props) {
   const [apiSecret, setApiSecret] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const mounted = useRef(true);
+
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -27,12 +35,13 @@ export function AccountForm({ onSuccess, onCancel }: Props) {
       api_key: apiKey,
       api_secret: apiSecret,
     });
+    if (!mounted.current) return;
     setBusy(false);
     if (r.error) {
-      setError(r.error);
+      if (mounted.current) setError(r.error);
       return;
     }
-    if (r.data) onSuccess(r.data.account);
+    if (r.data && mounted.current) onSuccess(r.data.account);
   }
 
   return (
