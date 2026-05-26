@@ -25,4 +25,19 @@ describe("formatters", () => {
     expect(csvEscape("he said \"hi\"")).toBe("\"he said \"\"hi\"\"\"");
     expect(csvEscape("plain")).toBe("plain");
   });
+
+  it("returns dash for null/undefined/empty/non-finite inputs", () => {
+    expect(formatDecimalUsdt(null)).toBe("—");
+    expect(formatDecimalUsdt(undefined)).toBe("—");
+    expect(formatDecimalUsdt("")).toBe("—");
+    expect(formatDecimalUsdt("NaN")).toBe("—");
+    expect(formatDecimalUsdt("Infinity")).toBe("—");
+    expect(formatPercent(null)).toBe("—");
+    expect(formatPercent("NaN")).toBe("—");
+  });
+
+  it("csvEscape handles empty string and CJK with comma", () => {
+    expect(csvEscape("")).toBe("");
+    expect(csvEscape("中文,逗号")).toBe("\"中文,逗号\"");
+  });
 });

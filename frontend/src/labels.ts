@@ -1,5 +1,6 @@
 const FIELD: Record<string, string> = {
   event_count: "期数",
+  total: "合计（USDT）",
   total_quote: "合计（USDT）",
   total_base: "合计（基础币）",
   cumulative_rate_pct: "累计费率",
@@ -51,5 +52,5 @@ export function sizeModeLabel(m: "BASE" | "QUOTE" | "RATE_ONLY"): string {
 }
 
 export function taskStatusLabel(s: string): string {
-  return ({ pending: "排队中", running: "查询中", done: "已完成", error: "失败" } as Record<string, string>)[s] ?? s;
+  return ({ pending: "排队中", running: "查询中", done: "已完成", failed: "失败" } as Record<string, string>)[s] ?? s;
 }

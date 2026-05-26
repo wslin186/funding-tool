@@ -14,13 +14,12 @@ export interface FundingPayment {
   timestamp: string;
   rate: string;
   mark_price: string;
-  quantity_base: string | null;
-  notional_quote: string | null;
-  payment_quote: string | null;
+  quantity_base: string;
+  notional_quote: string;
+  payment_quote: string;
 }
 
 export interface BacktestResponse {
-  input: BacktestRequest;
   event_count: number;
   total_quote: string | null;
   total_base: string | null;
@@ -31,7 +30,7 @@ export interface BacktestResponse {
 }
 
 export interface HistoryRequest {
-  account: string;
+  account_name: string;
   start: string;
   end: string;
   symbol?: string;
@@ -47,13 +46,13 @@ export interface IncomeRecord {
 export interface HistoryPayload {
   start: string;
   end: string;
-  total_usdt: string;
+  total: string;
   by_symbol: Record<string, string>;
   by_month: Record<string, string>;
   records: IncomeRecord[];
 }
 
-export type TaskStatus = "pending" | "running" | "done" | "error";
+export type TaskStatus = "pending" | "running" | "done" | "failed";
 
 export interface HistoryTaskStatus {
   status: TaskStatus;

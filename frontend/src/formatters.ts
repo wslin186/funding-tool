@@ -6,14 +6,14 @@ const NF_USDT = new Intl.NumberFormat("zh-CN", {
 export function formatDecimalUsdt(s: string | null | undefined): string {
   if (s === null || s === undefined || s === "") return "—";
   const n = Number(s);
-  if (!Number.isFinite(n)) return s;
+  if (!Number.isFinite(n)) return "—";
   return NF_USDT.format(n);
 }
 
 export function formatPercent(s: string | null | undefined): string {
   if (s === null || s === undefined || s === "") return "—";
   const n = Number(s);
-  if (!Number.isFinite(n)) return s;
+  if (!Number.isFinite(n)) return "—";
   const sign = n > 0 ? "+" : "";
   return `${sign}${n.toFixed(4)}%`;
 }
