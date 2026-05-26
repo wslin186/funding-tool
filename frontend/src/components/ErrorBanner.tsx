@@ -11,9 +11,10 @@ export function ErrorBanner({ error, onDismiss }: Props) {
   const msg = errorMessage(error.code, error.message);
   const fieldSuffix = error.field ? `（字段：${error.field}）` : "";
   const idSuffix = error.error_id ? `[ID: ${error.error_id}]` : "";
+  const tail = [fieldSuffix, idSuffix].filter(Boolean).join(" ");
   return (
     <div className="error-banner" role="alert">
-      <span>{msg}{fieldSuffix} {idSuffix}</span>
+      <span>{msg}{tail ? ` ${tail}` : ""}</span>
       {onDismiss && <button onClick={onDismiss} style={{ float: "right", background: "none", border: 0, cursor: "pointer", color: "inherit" }}>×</button>}
     </div>
   );

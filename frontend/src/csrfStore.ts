@@ -13,13 +13,19 @@ async function fetchToken(): Promise<string> {
 export const csrfStore = {
   async getToken(): Promise<string> {
     if (_token) return _token;
-    if (!_inflight) _inflight = fetchToken().then(t => { _token = t; _inflight = null; return t; });
+    if (!_inflight) {
+      _inflight = fetchToken()
+        .then(t => { _token = t; return t; })
+        .finally(() => { _inflight = null; });
+    }
     return _inflight;
   },
   async refresh(): Promise<void> {
     _token = null;
-    _inflight = null;
-    _token = await fetchToken();
+    _inflight = fetchToken()
+      .then(t => { _token = t; return t; })
+      .finally(() => { _inflight = null; });
+    await _inflight;
   },
   _set(t: string) { _token = t; },
 };

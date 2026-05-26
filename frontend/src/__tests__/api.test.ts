@@ -43,4 +43,14 @@ describe("api", () => {
     const r = await api.get("/health");
     expect(r.error?.code).toBe("network_error");
   });
+
+  it("caller cannot override credentials (same-origin enforced)", async () => {
+    csrfStore._set("t");
+    const f = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
+    vi.stubGlobal("fetch", f);
+    // Even if internal code ever passes credentials, same-origin wins
+    await api.get("/health");
+    const init = f.mock.calls[0][1] as RequestInit;
+    expect(init.credentials).toBe("same-origin");
+  });
 });

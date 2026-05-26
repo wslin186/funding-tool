@@ -21,7 +21,7 @@ async function parseError(res: Response): Promise<ApiError> {
 
 async function request<T>(path: string, init: RequestInit): Promise<ApiResult<T>> {
   try {
-    const res = await fetch(`${BASE}${path}`, { credentials: "same-origin", ...init });
+    const res = await fetch(`${BASE}${path}`, { ...init, credentials: "same-origin" });
     if (!res.ok) return { error: await parseError(res) };
     if (res.status === 204) return { data: undefined as unknown as T };
     return { data: (await res.json()) as T };

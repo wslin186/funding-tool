@@ -28,4 +28,16 @@ describe("csrfStore", () => {
     await csrfStore.refresh();
     expect(await csrfStore.getToken()).toBe("new");
   });
+
+  it("rejection does not poison cache; next call retries", async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error("net"))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ token: "ok" }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(csrfStore.getToken()).rejects.toThrow("net");
+    const t = await csrfStore.getToken();
+    expect(t).toBe("ok");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });
