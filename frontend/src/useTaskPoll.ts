@@ -7,18 +7,19 @@ export interface UseTaskPollResult {
   error: ApiError | null;
 }
 
-const POLL_INTERVAL_MS = 2000;
-
 function isTerminal(s: TaskStatus): boolean {
   return s === "done" || s === "failed";
 }
 
 /**
- * Polls GET /history/result/{taskId} every 2 seconds until the task reaches
- * a terminal status ("done" or "failed") or an API error occurs. Returns the
- * latest status snapshot and any terminal error.
+ * Polls GET /history/result/{taskId} every `intervalMs` milliseconds (default
+ * 2000) until the task reaches a terminal status ("done" or "failed") or an
+ * API error occurs. Returns the latest status snapshot and any terminal error.
  */
-export function useTaskPoll(taskId: string | null): UseTaskPollResult {
+export function useTaskPoll(
+  taskId: string | null,
+  intervalMs = 2000,
+): UseTaskPollResult {
   const [status, setStatus] = useState<HistoryTaskStatus | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -47,7 +48,7 @@ export function useTaskPoll(taskId: string | null): UseTaskPollResult {
       }
       timer = setTimeout(() => {
         void tick();
-      }, POLL_INTERVAL_MS);
+      }, intervalMs);
     }
 
     setStatus(null);
@@ -58,7 +59,7 @@ export function useTaskPoll(taskId: string | null): UseTaskPollResult {
       cancelled = true;
       if (timer !== null) clearTimeout(timer);
     };
-  }, [taskId]);
+  }, [taskId, intervalMs]);
 
   return { status, error };
 }

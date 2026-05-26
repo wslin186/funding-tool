@@ -63,7 +63,8 @@ export function MonthlyTrendChart({ byMonth }: Props) {
             type="monotone"
             dataKey="amount"
             stroke={COLOR_ACCENT}
-            dot={false}
+            dot
+            strokeWidth={2}
             name="amount"
           />
           <Line

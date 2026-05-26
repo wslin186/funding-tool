@@ -94,6 +94,36 @@ describe("useTaskPoll", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it("honors a custom intervalMs override", async () => {
+    vi.useFakeTimers();
+    const pending: HistoryTaskStatus = {
+      status: "running",
+      progress: { processed: 1, total: 10 },
+    };
+    const fetchMock = vi.fn().mockResolvedValue(jsonRes(pending));
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderHook(() => useTaskPoll("tid", 100));
+
+    // first fetch happens immediately
+    await act(async () => {
+      await flush();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // advance just past 100ms → second poll fires (would not at 2000ms default)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // and again
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it("stops polling on failed terminal status", async () => {
     vi.useFakeTimers();
     const failed: HistoryTaskStatus = {

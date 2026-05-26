@@ -67,7 +67,7 @@ export function HistoryPage() {
   const [error, setError] = useState<ApiError | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
 
-  const { status, error: pollError } = useTaskPoll(taskId);
+  const { status, error: pollError } = useTaskPoll(taskId, 2000);
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -298,14 +298,14 @@ export function HistoryPage() {
                   </div>
                 </div>
                 <div>
-                  <div style={metricLabelStyle}>合约数</div>
-                  <div style={metricValueStyle}>
-                    {Object.keys(result.by_symbol).length}
-                  </div>
+                  <div style={metricLabelStyle}>笔数</div>
+                  <div style={metricValueStyle}>{result.records.length}</div>
                 </div>
                 <div>
-                  <div style={metricLabelStyle}>明细条数</div>
-                  <div style={metricValueStyle}>{result.records.length}</div>
+                  <div style={metricLabelStyle}>月份数</div>
+                  <div style={metricValueStyle}>
+                    {Object.keys(result.by_month).length}
+                  </div>
                 </div>
               </div>
             </div>

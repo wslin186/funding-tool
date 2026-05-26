@@ -32,12 +32,16 @@ export function SymbolBarChart({ bySymbol }: Props) {
   }, [bySymbol]);
 
   return (
-    <div style={{ height: 280 }}>
+    <div style={{ height: 320 }}>
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 16, right: 24, bottom: 8, left: 8 }}>
+        <BarChart data={data} layout="vertical" margin={{ top: 16, right: 24, bottom: 8, left: 8 }}>
           <CartesianGrid stroke={COLOR_BORDER} strokeDasharray="3 3" />
-          <XAxis dataKey="symbol" interval={0} angle={-30} textAnchor="end" height={60} />
-          <YAxis />
+          <XAxis
+            type="number"
+            tickFormatter={(v) => formatDecimalUsdt(String(v))}
+            tick={{ fontSize: 11 }}
+          />
+          <YAxis type="category" dataKey="symbol" width={100} tick={{ fontSize: 11 }} />
           <Tooltip
             formatter={(value) => {
               const n = Number(value);
