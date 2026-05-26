@@ -26,10 +26,13 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <nav className="tab-bar">
+      <nav className="tab-bar" role="tablist">
         {TABS.map(t => (
           <button
             key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            aria-current={tab === t.id ? "page" : undefined}
             className={tab === t.id ? "active" : ""}
             onClick={() => setTab(t.id)}
           >
